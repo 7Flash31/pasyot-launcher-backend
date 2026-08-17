@@ -1,0 +1,16 @@
+# Address comes from SITE_ADDRESS (set in .env):
+#   local  -> :80                      (HTTP, no TLS)
+#   server -> launcher.example.com     (Caddy issues the certificate itself)
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# There is no /api prefix: the site and the API are one origin served by one
+	# process, which is what lets the session cookie work without CORS.
+	reverse_proxy backend:8081 {
+		# a modpack archive may upload for a long time: no timeouts
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}

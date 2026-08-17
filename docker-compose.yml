@@ -1,0 +1,46 @@
+# Whole stack: backend (which also serves the site) + Caddy with automatic HTTPS.
+#
+# All state lives in ./data on the host: SQLite database, modpack files, launcher
+# builds. It is a bind mount rather than a named volume precisely for moving
+# hosts: migrating the server means moving one directory.
+
+services:
+  backend:
+    build: .
+    env_file: .env
+    environment:
+      # paths inside the container are its own; nothing outside needs to know them
+      DATA_DIR: /data
+      PORT: 8081
+    volumes:
+      - ./data:/data
+    # liveness probe is the same binary with a flag, so no curl in the image
+    healthcheck:
+      test: ["CMD", "/app/pasyot-launcher", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    # SITE_ADDRESS=launcher.example.com -> HTTPS automatically; :80 -> local, no TLS
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  # certificates; no need to carry them when moving, Caddy will issue new ones
+  caddydata:
+  caddyconfig:

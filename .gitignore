@@ -1,0 +1,5 @@
+.env
+data/
+pasyot-launcher
+.DS_Store
+API.md
