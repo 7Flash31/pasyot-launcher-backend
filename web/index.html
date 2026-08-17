@@ -1,73 +1,133 @@
 <!doctype html>
 <html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Пасёт</title>
-<style>
-  body { margin: 0; font: 16px/1.5 system-ui, sans-serif; display: flex; min-height: 100vh; }
-  aside { width: 220px; padding: 20px; border-right: 1px solid #ddd; }
-  main { flex: 1; padding: 40px; }
-  h1 { margin: 0 0 24px; }
-  a.btn, button { display: block; width: 100%; box-sizing: border-box; margin-bottom: 8px;
-    padding: 10px 14px; border: 1px solid #888; border-radius: 6px; background: #fff;
-    font: inherit; text-align: center; text-decoration: none; color: inherit; cursor: pointer; }
-  a.download { display: inline-block; padding: 14px 28px; border-radius: 6px;
-    background: #222; color: #fff; text-decoration: none; font-size: 18px; }
-  p.meta { color: #666; font-size: 14px; }
-  p.error { color: #c00; }
-</style>
-</head>
-<body>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Pasyot</title>
+        <style>
+            body {
+                margin: 0;
+                font:
+                    16px/1.5 system-ui,
+                    sans-serif;
+                display: flex;
+                min-height: 100vh;
+            }
+            aside {
+                width: 220px;
+                padding: 20px;
+                border-right: 1px solid #ddd;
+            }
+            main {
+                flex: 1;
+                padding: 40px;
+            }
+            h1 {
+                margin: 0 0 24px;
+            }
+            a.btn,
+            button {
+                display: block;
+                width: 100%;
+                box-sizing: border-box;
+                margin-bottom: 8px;
+                padding: 10px 14px;
+                border: 1px solid #888;
+                border-radius: 6px;
+                background: #fff;
+                font: inherit;
+                text-align: center;
+                text-decoration: none;
+                color: inherit;
+                cursor: pointer;
+            }
+            a.download {
+                display: inline-block;
+                padding: 14px 28px;
+                border-radius: 6px;
+                background: #222;
+                color: #fff;
+                text-decoration: none;
+                font-size: 18px;
+            }
+            p.meta {
+                color: #666;
+                font-size: 14px;
+            }
+            p.error {
+                color: #c00;
+            }
+        </style>
+    </head>
+    <body>
+        <aside>
+            <div id="auth"></div>
+        </aside>
 
-<aside>
-  <div id="auth"></div>
-</aside>
+        <main>
+            <h1>Пасёт</h1>
+            <p>
+                <a class="download" href="/launcher/download"
+                    >Скачать лаунчер</a
+                >
+            </p>
+            <p class="meta" id="build"></p>
+        </main>
 
-<main>
-  <h1>Пасёт</h1>
-  <p><a class="download" href="/launcher/download">Скачать лаунчер</a></p>
-  <p class="meta" id="build"></p>
-</main>
+        <script>
+            const errors = {
+                access_denied: "Вход отменён",
+                expired_state: "Ссылка входа устарела, попробуйте снова",
+                vedrow_unavailable: "Ведро недоступно",
+                invalid_response: "Некорректный ответ от Ведра",
+            };
 
-<script>
-const errors = {
-  access_denied: 'Вход отменён',
-  expired_state: 'Ссылка входа устарела, попробуйте снова',
-  vedrow_unavailable: 'Ведро недоступно',
-  invalid_response: 'Некорректный ответ от Ведра',
-};
+            async function load() {
+                const err = new URLSearchParams(location.search).get(
+                    "login_error",
+                );
+                if (err) {
+                    document.getElementById("auth").innerHTML =
+                        '<p class="error">' + (errors[err] || err) + "</p>";
+                }
 
-async function load() {
-  const err = new URLSearchParams(location.search).get('login_error');
-  if (err) {
-    document.getElementById('auth').innerHTML =
-      '<p class="error">' + (errors[err] || err) + '</p>';
-  }
+                const build = await fetch("/launcher/latest");
+                document.getElementById("build").textContent = build.ok
+                    ? await build
+                          .json()
+                          .then(
+                              (b) =>
+                                  "Версия " +
+                                  b.version +
+                                  ", " +
+                                  (b.size / 1048576).toFixed(1) +
+                                  " МБ",
+                          )
+                    : "Сборка лаунчера ещё не загружена";
 
-  const build = await fetch('/launcher/latest');
-  document.getElementById('build').textContent = build.ok
-    ? await build.json().then(b => 'Версия ' + b.version + ', ' + (b.size / 1048576).toFixed(1) + ' МБ')
-    : 'Сборка лаунчера ещё не загружена';
+                const me = await fetch("/auth/me");
+                const auth = document.getElementById("auth");
+                if (!me.ok) {
+                    auth.innerHTML +=
+                        '<a class="btn" href="/auth/vedrow/start?next=/">Вход через Ведро</a>';
+                    return;
+                }
+                const user = await me.json();
+                auth.innerHTML +=
+                    "<p>" +
+                    user.username +
+                    "</p>" +
+                    (user.is_admin
+                        ? '<a class="btn" href="/admin.html">Сделать модпак</a>'
+                        : "") +
+                    '<button id="logout">Выйти</button>';
+                document.getElementById("logout").onclick = async () => {
+                    await fetch("/auth/logout", { method: "POST" });
+                    location.href = "/";
+                };
+            }
 
-  const me = await fetch('/auth/me');
-  const auth = document.getElementById('auth');
-  if (!me.ok) {
-    auth.innerHTML += '<a class="btn" href="/auth/vedrow/start?next=/">Вход через Ведро</a>';
-    return;
-  }
-  const user = await me.json();
-  auth.innerHTML += '<p>' + user.username + '</p>'
-    + (user.is_admin ? '<a class="btn" href="/admin.html">Сделать модпак</a>' : '')
-    + '<button id="logout">Выйти</button>';
-  document.getElementById('logout').onclick = async () => {
-    await fetch('/auth/logout', { method: 'POST' });
-    location.href = '/';
-  };
-}
-
-load();
-</script>
-
-</body>
+            load();
+        </script>
+    </body>
 </html>

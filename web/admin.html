@@ -1,96 +1,171 @@
 <!doctype html>
 <html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Модпаки — Пасёт</title>
-<style>
-  body { margin: 0; font: 16px/1.5 system-ui, sans-serif; padding: 40px; max-width: 640px; }
-  h1 { margin: 0 0 8px; }
-  h2 { margin: 32px 0 8px; font-size: 18px; }
-  label { display: block; margin-bottom: 8px; }
-  input, select, button { font: inherit; padding: 8px; box-sizing: border-box; }
-  input, select { width: 100%; }
-  button { padding: 10px 16px; cursor: pointer; }
-  p.meta { color: #666; font-size: 14px; }
-  p.error { color: #c00; }
-  pre { background: #f4f4f4; padding: 12px; overflow-x: auto; }
-</style>
-</head>
-<body>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Modpacks</title>
+        <style>
+            body {
+                margin: 0;
+                font:
+                    16px/1.5 system-ui,
+                    sans-serif;
+                padding: 40px;
+                max-width: 640px;
+            }
+            h1 {
+                margin: 0 0 8px;
+            }
+            h2 {
+                margin: 32px 0 8px;
+                font-size: 18px;
+            }
+            label {
+                display: block;
+                margin-bottom: 8px;
+            }
+            input,
+            select,
+            button {
+                font: inherit;
+                padding: 8px;
+                box-sizing: border-box;
+            }
+            input,
+            select {
+                width: 100%;
+            }
+            button {
+                padding: 10px 16px;
+                cursor: pointer;
+            }
+            p.meta {
+                color: #666;
+                font-size: 14px;
+            }
+            p.error {
+                color: #c00;
+            }
+            pre {
+                background: #f4f4f4;
+                padding: 12px;
+                overflow-x: auto;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Модпаки</h1>
+        <p class="meta"><a href="/">← на главную</a></p>
 
-<h1>Модпаки</h1>
-<p class="meta"><a href="/">← на главную</a></p>
+        <div id="page" hidden>
+            <h2>Новый модпак</h2>
+            <form id="create">
+                <label>Название <input name="name" required /></label>
+                <button>Создать</button>
+            </form>
 
-<div id="page" hidden>
-  <h2>Новый модпак</h2>
-  <form id="create">
-    <label>Название <input name="name" required></label>
-    <button>Создать</button>
-  </form>
+            <h2>Загрузить версию</h2>
+            <form id="upload">
+                <label
+                    >Модпак
+                    <select name="slug" id="slug" required></select
+                ></label>
+                <label
+                    >.zip <input type="file" name="file" accept=".zip" required
+                /></label>
+                <button>Загрузить</button>
+            </form>
 
-  <h2>Загрузить версию</h2>
-  <form id="upload">
-    <label>Модпак <select name="slug" id="slug" required></select></label>
-    <label>.zip <input type="file" name="file" accept=".zip" required></label>
-    <button>Загрузить</button>
-  </form>
+            <div id="result"></div>
+        </div>
 
-  <div id="result"></div>
-</div>
+        <p id="denied" hidden class="error">
+            Нужны права администратора. <a href="/">На главную</a>
+        </p>
 
-<p id="denied" hidden class="error">Нужны права администратора. <a href="/">На главную</a></p>
+        <script>
+            const $ = (id) => document.getElementById(id);
 
-<script>
-const $ = id => document.getElementById(id);
+            async function packs() {
+                const list = await fetch("/modpacks").then((r) => r.json());
+                $("slug").innerHTML = list
+                    .map(
+                        (m) =>
+                            '<option value="' +
+                            m.slug +
+                            '">' +
+                            m.name +
+                            " (v" +
+                            m.latest_version +
+                            ")</option>",
+                    )
+                    .join("");
+            }
 
-async function packs() {
-  const list = await fetch('/modpacks').then(r => r.json());
-  $('slug').innerHTML = list.map(m =>
-    '<option value="' + m.slug + '">' + m.name + ' (v' + m.latest_version + ')</option>').join('');
-}
+            async function start() {
+                const me = await fetch("/auth/me");
+                if (!me.ok || !(await me.json()).is_admin) {
+                    $("denied").hidden = false;
+                    return;
+                }
+                $("page").hidden = false;
+                packs();
+            }
 
-async function start() {
-  const me = await fetch('/auth/me');
-  if (!me.ok || !(await me.json()).is_admin) { $('denied').hidden = false; return; }
-  $('page').hidden = false;
-  packs();
-}
+            $("create").onsubmit = async (e) => {
+                e.preventDefault();
+                const name = new FormData(e.target).get("name");
+                const r = await fetch("/modpacks", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name }),
+                });
+                if (!r.ok) {
+                    $("result").innerHTML =
+                        '<p class="error">' + (await r.text()) + "</p>";
+                    return;
+                }
+                e.target.reset();
+                $("result").innerHTML =
+                    "<p>Модпак создан: " + (await r.json()).slug + "</p>";
+                packs();
+            };
 
-$('create').onsubmit = async e => {
-  e.preventDefault();
-  const name = new FormData(e.target).get('name');
-  const r = await fetch('/modpacks', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-  if (!r.ok) { $('result').innerHTML = '<p class="error">' + await r.text() + '</p>'; return; }
-  e.target.reset();
-  $('result').innerHTML = '<p>Модпак создан: ' + (await r.json()).slug + '</p>';
-  packs();
-};
+            $("upload").onsubmit = async (e) => {
+                e.preventDefault();
+                const form = new FormData(e.target);
+                const slug = form.get("slug");
+                form.delete("slug");
+                $("result").innerHTML = '<p class="meta">Загружаем…</p>';
+                const r = await fetch("/modpacks/" + slug + "/versions", {
+                    method: "POST",
+                    body: form,
+                });
+                if (!r.ok) {
+                    $("result").innerHTML =
+                        '<p class="error">' + (await r.text()) + "</p>";
+                    return;
+                }
+                const d = await r.json();
+                $("result").innerHTML =
+                    "<p>Версия " +
+                    d.version.version +
+                    ": " +
+                    d.version.file_count +
+                    " файлов, " +
+                    (d.version.total_bytes / 1048576).toFixed(1) +
+                    " МБ</p>" +
+                    '<p><a href="' +
+                    d.pack_url +
+                    '">Скачать файл для лаунчера</a></p>' +
+                    "<pre>" +
+                    JSON.stringify(d.pack, null, 2) +
+                    "</pre>";
+                e.target.reset();
+                packs();
+            };
 
-$('upload').onsubmit = async e => {
-  e.preventDefault();
-  const form = new FormData(e.target);
-  const slug = form.get('slug');
-  form.delete('slug');
-  $('result').innerHTML = '<p class="meta">Загружаем…</p>';
-  const r = await fetch('/modpacks/' + slug + '/versions', { method: 'POST', body: form });
-  if (!r.ok) { $('result').innerHTML = '<p class="error">' + await r.text() + '</p>'; return; }
-  const d = await r.json();
-  $('result').innerHTML =
-    '<p>Версия ' + d.version.version + ': ' + d.version.file_count + ' файлов, '
-    + (d.version.total_bytes / 1048576).toFixed(1) + ' МБ</p>'
-    + '<p><a href="' + d.pack_url + '">Скачать файл для лаунчера</a></p>'
-    + '<pre>' + JSON.stringify(d.pack, null, 2) + '</pre>';
-  e.target.reset();
-  packs();
-};
-
-start();
-</script>
-
-</body>
+            start();
+        </script>
+    </body>
 </html>
