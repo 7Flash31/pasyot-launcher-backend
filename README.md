@@ -20,10 +20,28 @@ API. No external database, no S3, no migrations.
 
 Update with `git pull && docker compose up -d --build`.
 
-Locally the same thing runs without docker:
+## Quick start on a workstation
+
+The start scripts create a local `.env` on first run (they never overwrite an
+existing one) and bring the server up:
 
 ```bash
-cp .env.example .env   # SITE_ADDRESS=:80, PUBLIC_BASE_URL=http://127.0.0.1:8081
+./start.sh              # macOS, Linux: build and run locally, needs Go
+./start.sh --docker     # the same stack as on a server, needs docker
+```
+
+```bat
+start.bat               ::  Windows: build and run locally, needs Go, no docker
+```
+
+Only Go is required for the local path — the SQLite driver is pure Go, so there
+is no C toolchain to install. Vedrow login stays off (`503`) until `VEDROW_*` and
+`ADMINS` are filled in `.env`; everything else works meanwhile.
+
+By hand it is the same two steps:
+
+```bash
+cp .env.example .env   # PUBLIC_BASE_URL=http://127.0.0.1:8081
 go run .               # site and API on :8081, data in ./data
 ```
 
@@ -182,6 +200,7 @@ Left for later on purpose:
 ## Layout
 
 ```
+start.sh / start.bat      quick local start; --docker runs the full stack
 API.md                    API reference + how to connect the launcher (Russian)
 Dockerfile                static binary + web/ on alpine, 40 MB
 docker-compose.yml        backend + Caddy; all state in ./data on the host
