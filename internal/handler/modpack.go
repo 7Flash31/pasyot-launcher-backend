@@ -51,6 +51,7 @@ func (h *Handler) CreateModpack(w http.ResponseWriter, r *http.Request) {
 		Name        string `json:"name"`
 		Slug        string `json:"slug"`
 		Description string `json:"description"`
+		Loader      string `json:"loader"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		badRequest(w, "bad json")
@@ -59,6 +60,11 @@ func (h *Handler) CreateModpack(w http.ResponseWriter, r *http.Request) {
 	body.Name = strings.TrimSpace(body.Name)
 	if body.Name == "" || len([]rune(body.Name)) > 64 {
 		badRequest(w, "name: 1-64 characters")
+		return
+	}
+	loader := strings.ToLower(strings.TrimSpace(body.Loader))
+	if !domain.ValidLoader(loader) {
+		badRequest(w, "loader: one of "+strings.Join(domain.Loaders, ", "))
 		return
 	}
 	s := body.Slug
@@ -78,7 +84,7 @@ func (h *Handler) CreateModpack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, err := h.Store.CreateModpack(r.Context(), s, body.Name, strings.TrimSpace(body.Description))
+	m, err := h.Store.CreateModpack(r.Context(), s, body.Name, strings.TrimSpace(body.Description), loader)
 	if err != nil {
 		internalError(w, err)
 		return
@@ -166,6 +172,7 @@ func (h *Handler) Manifest(w http.ResponseWriter, r *http.Request) {
 		Format:     manifestFormat,
 		Modpack:    m.Slug,
 		Name:       m.Name,
+		Loader:     m.Loader,
 		Version:    version.Version,
 		Notes:      version.Notes,
 		Groups:     pack.Groups(files),
@@ -285,6 +292,7 @@ func packDescriptor(base string, m *domain.Modpack, version int) domain.Pack {
 		Server:      base,
 		Modpack:     m.Slug,
 		Name:        m.Name,
+		Loader:      m.Loader,
 		Version:     version,
 		ManifestURL: manifestURL(base, m.Slug, version),
 	}

@@ -16,8 +16,23 @@ type Modpack struct {
 	Slug          string    `json:"slug"`
 	Name          string    `json:"name"`
 	Description   string    `json:"description,omitempty"`
+	Loader        string    `json:"loader,omitempty"`
 	LatestVersion int       `json:"latest_version"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+var Loaders = []string{"vanilla", "forge", "neoforge", "fabric", "quilt"}
+
+func ValidLoader(s string) bool {
+	if s == "" {
+		return true
+	}
+	for _, l := range Loaders {
+		if l == s {
+			return true
+		}
+	}
+	return false
 }
 
 type Version struct {
@@ -42,6 +57,7 @@ type Manifest struct {
 	Format     int       `json:"format"`
 	Modpack    string    `json:"modpack"`
 	Name       string    `json:"name"`
+	Loader     string    `json:"loader,omitempty"`
 	Version    int       `json:"version"`
 	Notes      string    `json:"notes,omitempty"`
 	Groups     []Group   `json:"groups"`
@@ -63,6 +79,7 @@ type Pack struct {
 	Server      string `json:"server"`
 	Modpack     string `json:"modpack"`
 	Name        string `json:"name"`
+	Loader      string `json:"loader,omitempty"`
 	Version     int    `json:"version"`
 	ManifestURL string `json:"manifest_url"`
 }

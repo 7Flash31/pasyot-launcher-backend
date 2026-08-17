@@ -61,6 +61,17 @@
             <h2>Новый модпак</h2>
             <form id="create">
                 <label>Название <input name="name" required /></label>
+                <label
+                    >Модлоадер
+                    <select name="loader" required>
+                        <option value="" disabled selected>выберите</option>
+                        <option value="forge">Forge</option>
+                        <option value="neoforge">NeoForge</option>
+                        <option value="fabric">Fabric</option>
+                        <option value="quilt">Quilt</option>
+                        <option value="vanilla">Без модлоадера</option>
+                    </select></label
+                >
                 <button>Создать</button>
             </form>
 
@@ -97,6 +108,7 @@
                             m.name +
                             " (v" +
                             m.latest_version +
+                            (m.loader ? ", " + m.loader : "") +
                             ")</option>",
                     )
                     .join("");
@@ -114,11 +126,14 @@
 
             $("create").onsubmit = async (e) => {
                 e.preventDefault();
-                const name = new FormData(e.target).get("name");
+                const form = new FormData(e.target);
                 const r = await fetch("/modpacks", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name }),
+                    body: JSON.stringify({
+                        name: form.get("name"),
+                        loader: form.get("loader"),
+                    }),
                 });
                 if (!r.ok) {
                     $("result").innerHTML =

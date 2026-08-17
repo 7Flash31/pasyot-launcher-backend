@@ -204,11 +204,13 @@ Left for later on purpose:
 - **login from the launcher itself**: login currently assumes a browser. A
   desktop client needs a loopback redirect (RFC 8252) — Vedrow supports it, the
   port is not compared for loopback addresses;
-- **editing a modpack** (rename, change description) and deleting a single
-  version;
-- **migrations**: the schema is applied whole and idempotently from
-  `internal/store/schema.sql`. The first migration will be needed once the
-  database holds data that cannot be lost;
+- **editing a modpack** (rename, change description or mod loader) and deleting a
+  single version;
+- **real migrations**: the schema is applied whole and idempotently from
+  `internal/store/schema.sql`, and missing columns are added on startup by
+  `addMissingColumns` in `internal/store`. That covers adding a column to an
+  existing database; anything that rewrites data will need a proper migration
+  tool;
 - **rate limits**: Vedrow has them; here the traffic is an admin and launchers,
   so there are none.
 

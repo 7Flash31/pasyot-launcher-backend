@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"pasyot-launcher/internal/domain"
@@ -31,7 +32,32 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("schema: %w", err)
 	}
+	if err := addMissingColumns(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("schema: %w", err)
+	}
 	return &Store{db: db}, nil
+}
+
+func addMissingColumns(db *sql.DB) error {
+	columns := []struct{ table, column, ddl string }{
+		{"modpacks", "loader", `ALTER TABLE modpacks ADD COLUMN loader TEXT NOT NULL DEFAULT ''`},
+	}
+	for _, c := range columns {
+		var exists int
+		err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&exists)
+		if err != nil {
+			return err
+		}
+		if exists > 0 {
+			continue
+		}
+		if _, err := db.Exec(c.ddl); err != nil {
+			return fmt.Errorf("%s.%s: %w", c.table, c.column, err)
+		}
+		log.Printf("schema: added column %s.%s", c.table, c.column)
+	}
+	return nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -128,10 +154,10 @@ func (s *Store) TakeLoginState(ctx context.Context, state string) (verifier, nex
 	return verifier, next, nil
 }
 
-func (s *Store) CreateModpack(ctx context.Context, slug, name, description string) (*domain.Modpack, error) {
+func (s *Store) CreateModpack(ctx context.Context, slug, name, description, loader string) (*domain.Modpack, error) {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO modpacks (slug, name, description, created_at) VALUES (?, ?, ?, ?)`,
-		slug, name, description, time.Now().Unix())
+		INSERT INTO modpacks (slug, name, description, loader, created_at) VALUES (?, ?, ?, ?, ?)`,
+		slug, name, description, loader, time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +176,7 @@ func (s *Store) DeleteModpack(ctx context.Context, slug string) error {
 }
 
 const modpackColumns = `
-	m.slug, m.name, m.description, m.created_at,
+	m.slug, m.name, m.description, m.loader, m.created_at,
 	COALESCE((SELECT MAX(number) FROM versions v WHERE v.modpack_slug = m.slug), 0)`
 
 func (s *Store) Modpacks(ctx context.Context) ([]domain.Modpack, error) {
@@ -163,7 +189,7 @@ func (s *Store) Modpacks(ctx context.Context) ([]domain.Modpack, error) {
 	for rows.Next() {
 		var m domain.Modpack
 		var created int64
-		if err := rows.Scan(&m.Slug, &m.Name, &m.Description, &created, &m.LatestVersion); err != nil {
+		if err := rows.Scan(&m.Slug, &m.Name, &m.Description, &m.Loader, &created, &m.LatestVersion); err != nil {
 			return nil, err
 		}
 		m.CreatedAt = time.Unix(created, 0).UTC()
@@ -176,7 +202,7 @@ func (s *Store) Modpack(ctx context.Context, slug string) (*domain.Modpack, erro
 	var m domain.Modpack
 	var created int64
 	err := s.db.QueryRowContext(ctx, `SELECT `+modpackColumns+` FROM modpacks m WHERE m.slug = ?`, slug).
-		Scan(&m.Slug, &m.Name, &m.Description, &created, &m.LatestVersion)
+		Scan(&m.Slug, &m.Name, &m.Description, &m.Loader, &created, &m.LatestVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
