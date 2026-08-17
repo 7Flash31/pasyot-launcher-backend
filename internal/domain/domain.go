@@ -68,10 +68,10 @@ type Pack struct {
 }
 
 type LauncherBuild struct {
-	Version   string    `json:"version"`
-	Filename  string    `json:"filename"`
-	Size      int64     `json:"size"`
-	SHA256    string    `json:"sha256"`
-	URL       string    `json:"url,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	Version   string     `json:"version"`
+	Filename  string     `json:"filename"`
+	Size      int64      `json:"size,omitempty"`
+	SHA256    string     `json:"sha256,omitempty"`
+	URL       string     `json:"url,omitempty"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
 }

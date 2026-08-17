@@ -96,6 +96,21 @@ and CORS is off by default. If the frontend ever moves to a separate domain, set
 `PUBLIC_WEB_URL` (where to return after login) and `CORS_ORIGIN`; without them
 the post-login redirect is relative.
 
+## Where the launcher binary comes from
+
+Three sources, the first one set wins:
+
+| source | how | what `/launcher/download` does |
+|---|---|---|
+| external address | `LAUNCHER_URL` | **302** to it (GitHub release, file hosting) |
+| file on disk | `LAUNCHER_FILE` | serves the file itself; in docker drop it into `./data` and point at `/data/<name>` |
+| uploaded build | `POST /launcher/builds` | serves it from the store |
+
+`LAUNCHER_VERSION` is shown next to the button. While either env source is set,
+uploads answer 409 — otherwise it would be unclear what actually downloads. The
+public address stays `/launcher/download` in all three cases, so the button never
+has to change.
+
 ## How it works
 
 Files are stored **by content**: the path in the store is the file's sha256.

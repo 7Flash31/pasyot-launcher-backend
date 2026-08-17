@@ -317,7 +317,8 @@ func (s *Store) VersionFiles(ctx context.Context, slug string, number int) ([]do
 }
 
 func (s *Store) SaveLauncherBuild(ctx context.Context, b *domain.LauncherBuild) error {
-	b.CreatedAt = time.Now().UTC().Truncate(time.Second)
+	now := time.Now().UTC().Truncate(time.Second)
+	b.CreatedAt = &now
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO launcher_builds (version, filename, size, sha256, created_at)
 		VALUES (?, ?, ?, ?, ?)
@@ -340,7 +341,8 @@ func (s *Store) LatestLauncherBuild(ctx context.Context) (*domain.LauncherBuild,
 	if err != nil {
 		return nil, err
 	}
-	b.CreatedAt = time.Unix(created, 0).UTC()
+	at := time.Unix(created, 0).UTC()
+	b.CreatedAt = &at
 	return &b, nil
 }
 

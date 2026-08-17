@@ -18,6 +18,10 @@ type Handler struct {
 
 	Admins []string
 
+	LauncherURL     string
+	LauncherFile    string
+	LauncherVersion string
+
 	PublicBaseURL  string
 	PublicWebURL   string
 	WebDir         string

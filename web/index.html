@@ -82,6 +82,13 @@
                 invalid_response: "Некорректный ответ от Ведра",
             };
 
+            function describe(b) {
+                const parts = [];
+                if (b.version) parts.push("Версия " + b.version);
+                if (b.size) parts.push((b.size / 1048576).toFixed(1) + " МБ");
+                return parts.join(", ");
+            }
+
             async function load() {
                 const err = new URLSearchParams(location.search).get(
                     "login_error",
@@ -93,16 +100,7 @@
 
                 const build = await fetch("/launcher/latest");
                 document.getElementById("build").textContent = build.ok
-                    ? await build
-                          .json()
-                          .then(
-                              (b) =>
-                                  "Версия " +
-                                  b.version +
-                                  ", " +
-                                  (b.size / 1048576).toFixed(1) +
-                                  " МБ",
-                          )
+                    ? await build.json().then(describe)
                     : "Сборка лаунчера ещё не загружена";
 
                 const me = await fetch("/auth/me");

@@ -71,16 +71,32 @@ func main() {
 		log.Print("[WARN] vedrow login is not configured (VEDROW_*): /auth/vedrow/start will answer 503")
 	}
 
+	launcherURL := strings.TrimSpace(os.Getenv("LAUNCHER_URL"))
+	launcherFile := strings.TrimSpace(os.Getenv("LAUNCHER_FILE"))
+	switch {
+	case launcherURL != "":
+		log.Printf("launcher: redirecting downloads to %s", launcherURL)
+	case launcherFile != "":
+		if _, err := os.Stat(launcherFile); err != nil {
+			log.Printf("[WARN] LAUNCHER_FILE %s is not readable: %v", launcherFile, err)
+		} else {
+			log.Printf("launcher: serving %s", launcherFile)
+		}
+	}
+
 	h := &handler.Handler{
-		Store:          st,
-		Blobs:          blobs,
-		Vedrow:         vd,
-		Admins:         splitEnv("ADMINS"),
-		PublicBaseURL:  publicBase,
-		PublicWebURL:   publicWeb,
-		WebDir:         webDir,
-		SecureCookies:  strings.HasPrefix(publicBase, "https://"),
-		MaxUploadBytes: int64(envInt("MAX_UPLOAD_MB", 4096)) << 20,
+		Store:           st,
+		Blobs:           blobs,
+		Vedrow:          vd,
+		Admins:          splitEnv("ADMINS"),
+		LauncherURL:     launcherURL,
+		LauncherFile:    launcherFile,
+		LauncherVersion: strings.TrimSpace(os.Getenv("LAUNCHER_VERSION")),
+		PublicBaseURL:   publicBase,
+		PublicWebURL:    publicWeb,
+		WebDir:          webDir,
+		SecureCookies:   strings.HasPrefix(publicBase, "https://"),
+		MaxUploadBytes:  int64(envInt("MAX_UPLOAD_MB", 4096)) << 20,
 	}
 	if len(h.Admins) == 0 {
 		log.Print("[WARN] ADMINS is empty: nobody will be able to create a modpack")
