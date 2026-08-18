@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"pasyot-launcher/internal/blob"
+	"pasyot-launcher/internal/minecraft"
 	"pasyot-launcher/internal/store"
 	"pasyot-launcher/internal/vedrow"
 
@@ -15,6 +16,8 @@ type Handler struct {
 	Store  *store.Store
 	Blobs  *blob.Store
 	Vedrow *vedrow.Client
+
+	Minecraft *minecraft.Catalog
 
 	Admins []string
 
@@ -42,23 +45,25 @@ func NewRouter(h *Handler) http.Handler {
 
 	r.Get("/objects/{sha}", h.Object)
 
+	r.Get("/minecraft/versions", h.MinecraftVersions)
+
 	r.Get("/launcher/latest", h.LauncherLatest)
 	r.Get("/launcher/download", h.LauncherDownload)
 	r.With(h.withUser, h.requireAdmin).Post("/launcher/builds", h.UploadLauncher)
 
 	r.Route("/modpacks", func(r chi.Router) {
 		r.Get("/", h.ListModpacks)
-		r.Get("/{slug}", h.GetModpack)
-		r.Get("/{slug}/manifest", h.Manifest)
-		r.Get("/{slug}/versions/{version}/manifest", h.Manifest)
-		r.Get("/{slug}/pack", h.PackFile)
-		r.Get("/{slug}/versions/{version}/pack", h.PackFile)
+		r.Get("/{name}", h.GetModpack)
+		r.Get("/{name}/manifest", h.Manifest)
+		r.Get("/{name}/pack", h.PackFile)
 
 		r.Group(func(r chi.Router) {
 			r.Use(h.withUser, h.requireAdmin)
 			r.Post("/", h.CreateModpack)
-			r.Delete("/{slug}", h.DeleteModpack)
-			r.Post("/{slug}/versions", h.UploadVersion)
+			r.Patch("/{name}", h.UpdateModpack)
+			r.Delete("/{name}", h.DeleteModpack)
+			r.Post("/{name}/versions", h.UploadVersion)
+			r.Get("/{name}/archive", h.VersionArchive)
 		})
 	})
 

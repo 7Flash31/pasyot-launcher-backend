@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"regexp"
+	"strings"
+	"time"
+)
 
 type User struct {
 	ID        string    `json:"id"`
@@ -13,15 +17,29 @@ type User struct {
 }
 
 type Modpack struct {
-	Slug          string    `json:"slug"`
 	Name          string    `json:"name"`
 	Description   string    `json:"description,omitempty"`
 	Loader        string    `json:"loader,omitempty"`
+	Minecraft     string    `json:"minecraft,omitempty"`
 	LatestVersion int       `json:"latest_version"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
 var Loaders = []string{"vanilla", "forge", "neoforge", "fabric", "quilt"}
+
+var nameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+
+func NormalizeName(s string) string {
+	return strings.Join(strings.Fields(strings.ToLower(s)), "-")
+}
+
+func ValidName(s string) bool { return nameRe.MatchString(s) }
+
+var minecraftRe = regexp.MustCompile(`^[0-9][0-9a-zA-Z.\-_+]{0,15}$`)
+
+func ValidMinecraft(s string) bool {
+	return s == "" || minecraftRe.MatchString(s)
+}
 
 func ValidLoader(s string) bool {
 	if s == "" {
@@ -55,9 +73,9 @@ type File struct {
 
 type Manifest struct {
 	Format     int       `json:"format"`
-	Modpack    string    `json:"modpack"`
 	Name       string    `json:"name"`
 	Loader     string    `json:"loader,omitempty"`
+	Minecraft  string    `json:"minecraft,omitempty"`
 	Version    int       `json:"version"`
 	Notes      string    `json:"notes,omitempty"`
 	Groups     []Group   `json:"groups"`
@@ -75,13 +93,13 @@ type Group struct {
 }
 
 type Pack struct {
-	Format      int    `json:"format"`
-	Server      string `json:"server"`
-	Modpack     string `json:"modpack"`
-	Name        string `json:"name"`
-	Loader      string `json:"loader,omitempty"`
-	Version     int    `json:"version"`
-	ManifestURL string `json:"manifest_url"`
+	Format    int    `json:"format"`
+	Server    string `json:"server"`
+	Name      string `json:"name"`
+	Loader    string `json:"loader,omitempty"`
+	Minecraft string `json:"minecraft,omitempty"`
+	Version   int    `json:"version"`
+	Manifest  string `json:"manifest"`
 }
 
 type LauncherBuild struct {

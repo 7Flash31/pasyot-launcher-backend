@@ -102,3 +102,13 @@ func (s *Store) TempFile(pattern string) (*os.File, error) {
 	}
 	return f, nil
 }
+
+func (s *Store) Remove(sha string) error {
+	if !ValidSHA(sha) {
+		return errors.New("invalid hash")
+	}
+	if err := os.Remove(s.Path(sha)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}

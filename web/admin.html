@@ -3,182 +3,768 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Modpacks</title>
+        <title>Modpacks — Pasyot</title>
         <style>
+            :root {
+                --line: #e2e2e2;
+                --muted: #6b6b6b;
+                --accent: #1b1b1b;
+                --bad: #c0392b;
+                --ok: #1e7e45;
+                --soft: #f6f6f6;
+            }
+            * {
+                box-sizing: border-box;
+            }
             body {
-                margin: 0;
+                margin: 0 auto;
+                padding: 40px 24px 80px;
+                max-width: 900px;
                 font:
-                    16px/1.5 system-ui,
+                    16px/1.55 system-ui,
                     sans-serif;
-                padding: 40px;
-                max-width: 640px;
+                color: #111;
+            }
+            header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+                margin-bottom: 24px;
+            }
+            header div {
+                display: flex;
+                align-items: center;
+                gap: 16px;
             }
             h1 {
-                margin: 0 0 8px;
+                margin: 0;
+                font-size: 26px;
             }
-            h2 {
-                margin: 32px 0 8px;
-                font-size: 18px;
+            a {
+                color: #1b53c0;
+            }
+            button {
+                padding: 10px 18px;
+                border: 1px solid var(--accent);
+                border-radius: 8px;
+                background: var(--accent);
+                color: #fff;
+                font: inherit;
+                cursor: pointer;
+            }
+            button:hover {
+                background: #000;
+            }
+            button:disabled {
+                background: #bdbdbd;
+                border-color: #bdbdbd;
+                cursor: progress;
+            }
+            button.ghost {
+                background: #fff;
+                color: #111;
+                border-color: #c9c9c9;
+                padding: 6px 12px;
+                font-size: 13px;
+            }
+            button.ghost:hover {
+                background: var(--soft);
+            }
+            button.danger {
+                color: var(--bad);
+                border-color: #e3b5b0;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 14px;
+            }
+            th,
+            td {
+                text-align: left;
+                padding: 12px 8px;
+                border-bottom: 1px solid var(--line);
+                vertical-align: middle;
+            }
+            th {
+                font-size: 12px;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                color: var(--muted);
+            }
+            td.name {
+                font-family: ui-monospace, monospace;
+                font-weight: 600;
+            }
+            td.actions {
+                text-align: right;
+                white-space: nowrap;
+            }
+            .empty {
+                padding: 32px;
+                border: 1px dashed var(--line);
+                border-radius: 10px;
+                text-align: center;
+                color: var(--muted);
+                font-size: 14px;
+            }
+            dialog {
+                width: min(560px, 92vw);
+                border: 1px solid var(--line);
+                border-radius: 12px;
+                padding: 0;
+                color: #111;
+            }
+            dialog::backdrop {
+                background: rgba(0, 0, 0, 0.35);
+            }
+            dialog form {
+                padding: 24px;
+            }
+            dialog h2 {
+                margin: 0 0 18px;
+                font-size: 20px;
+            }
+            dialog h2 span {
+                font-family: ui-monospace, monospace;
+            }
+            .row {
+                display: flex;
+                gap: 12px;
+                flex-wrap: wrap;
+            }
+            .row > label {
+                flex: 1 1 180px;
             }
             label {
                 display: block;
-                margin-bottom: 8px;
-            }
-            input,
-            select,
-            button {
-                font: inherit;
-                padding: 8px;
-                box-sizing: border-box;
+                margin-bottom: 14px;
+                font-size: 13px;
+                color: var(--muted);
             }
             input,
             select {
+                display: block;
                 width: 100%;
+                margin-top: 4px;
+                padding: 9px 10px;
+                border: 1px solid #c9c9c9;
+                border-radius: 8px;
+                font: inherit;
+                color: #111;
+                background: #fff;
             }
-            button {
-                padding: 10px 16px;
-                cursor: pointer;
+            input:disabled {
+                background: var(--soft);
+                color: var(--muted);
             }
-            p.meta {
-                color: #666;
-                font-size: 14px;
+            input:focus,
+            select:focus {
+                outline: 2px solid #b9cdf5;
+                border-color: #7ba1e8;
             }
-            p.error {
-                color: #c00;
+            input[type="file"] {
+                padding: 7px;
             }
-            pre {
-                background: #f4f4f4;
-                padding: 12px;
-                overflow-x: auto;
+            .hint {
+                margin: -10px 0 14px;
+                font-size: 13px;
+                color: var(--muted);
+                min-height: 18px;
+            }
+            .hint b {
+                color: #111;
+                font-family: ui-monospace, monospace;
+            }
+            .versions {
+                margin: 0 0 16px;
+                padding: 12px 14px;
+                background: var(--soft);
+                border-radius: 8px;
+                font-size: 13px;
+                max-height: 150px;
+                overflow-y: auto;
+            }
+            .versions div + div {
+                margin-top: 6px;
+            }
+            .msg {
+                margin: 0 0 14px;
+                padding: 11px 13px;
+                border-radius: 8px;
+                font-size: 13px;
+                display: none;
+            }
+            .msg.show {
+                display: block;
+            }
+            .msg.ok {
+                background: #eaf6ee;
+                color: var(--ok);
+            }
+            .msg.err {
+                background: #fdeceb;
+                color: var(--bad);
+            }
+            .msg.info {
+                background: var(--soft);
+                color: var(--muted);
+            }
+            progress {
+                width: 100%;
+                height: 10px;
+                margin-bottom: 14px;
+            }
+            .foot {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                border-top: 1px solid var(--line);
+                padding-top: 16px;
+            }
+            .foot .right {
+                display: flex;
+                gap: 8px;
             }
         </style>
     </head>
     <body>
-        <h1>Модпаки</h1>
-        <p class="meta"><a href="/">← на главную</a></p>
+        <header>
+            <div>
+                <h1>Модпаки</h1>
+                <a href="/">← на главную</a>
+            </div>
+            <button id="new" hidden>Создать сборку</button>
+        </header>
 
-        <div id="page" hidden>
-            <h2>Новый модпак</h2>
-            <form id="create">
-                <label>Название <input name="name" required /></label>
+        <div id="denied" hidden class="msg"></div>
+        <div id="toast" class="msg"></div>
+        <div id="list"></div>
+
+        <dialog id="editor">
+            <form id="form" method="dialog">
+                <h2 id="dialogtitle">Новая сборка</h2>
+
+                <div id="dialogmsg" class="msg"></div>
+
                 <label
-                    >Модлоадер
-                    <select name="loader" required>
-                        <option value="" disabled selected>выберите</option>
-                        <option value="forge">Forge</option>
-                        <option value="neoforge">NeoForge</option>
-                        <option value="fabric">Fabric</option>
-                        <option value="quilt">Quilt</option>
-                        <option value="vanilla">Без модлоадера</option>
-                    </select></label
-                >
-                <button>Создать</button>
+                    >Название (латиницей)
+                    <input
+                        id="name"
+                        name="name"
+                        placeholder="pasyot-smp"
+                        pattern="[A-Za-z0-9 _-]+"
+                        title="Латиница, цифры, дефис и подчёркивание"
+                        autocomplete="off"
+                        required
+                    />
+                </label>
+                <p class="hint" id="namehint"></p>
+
+                <div class="row">
+                    <label
+                        >Модлоадер
+                        <select id="loader" name="loader" required>
+                            <option value="" disabled selected>выберите</option>
+                            <option value="forge">Forge</option>
+                            <option value="neoforge">NeoForge</option>
+                            <option value="fabric">Fabric</option>
+                            <option value="quilt">Quilt</option>
+                            <option value="vanilla">Vanilla</option>
+                        </select>
+                    </label>
+                    <label
+                        >Версия Minecraft
+                        <select id="minecraft" name="minecraft" required>
+                            <option value="" disabled selected>
+                                загружаем…
+                            </option>
+                        </select>
+                    </label>
+                </div>
+                <p class="hint" id="mchint"></p>
+                <label id="customwrap" hidden
+                    >Своя версия
+                    <input
+                        id="custom"
+                        placeholder="24w14a"
+                        autocomplete="off"
+                    />
+                </label>
+
+                <div id="versionswrap" hidden>
+                    <div class="versions" id="versions"></div>
+                </div>
+
+                <label
+                    >Файлы сборки — .zip<span id="filehint"></span>
+                    <input
+                        type="file"
+                        id="file"
+                        accept=".zip,application/zip"
+                    />
+                </label>
+                <progress id="progress" max="100" value="0" hidden></progress>
+
+                <div class="foot">
+                    <button
+                        type="button"
+                        class="ghost danger"
+                        id="delete"
+                        hidden
+                    >
+                        Удалить сборку
+                    </button>
+                    <div class="right">
+                        <button type="button" class="ghost" id="cancel">
+                            Отмена
+                        </button>
+                        <button type="submit" id="save">Создать</button>
+                    </div>
+                </div>
             </form>
-
-            <h2>Загрузить версию</h2>
-            <form id="upload">
-                <label
-                    >Модпак
-                    <select name="slug" id="slug" required></select
-                ></label>
-                <label
-                    >.zip <input type="file" name="file" accept=".zip" required
-                /></label>
-                <button>Загрузить</button>
-            </form>
-
-            <div id="result"></div>
-        </div>
-
-        <p id="denied" hidden class="error">
-            Нужны права администратора. <a href="/">На главную</a>
-        </p>
+        </dialog>
 
         <script>
             const $ = (id) => document.getElementById(id);
 
-            async function packs() {
-                const list = await fetch("/modpacks").then((r) => r.json());
-                $("slug").innerHTML = list
-                    .map(
-                        (m) =>
-                            '<option value="' +
-                            m.slug +
-                            '">' +
-                            m.name +
-                            " (v" +
-                            m.latest_version +
-                            (m.loader ? ", " + m.loader : "") +
-                            ")</option>",
+            const escape = (s) =>
+                String(s).replace(
+                    /[&<>"']/g,
+                    (c) =>
+                        ({
+                            "&": "&amp;",
+                            "<": "&lt;",
+                            ">": "&gt;",
+                            '"': "&quot;",
+                            "'": "&#39;",
+                        })[c],
+                );
+
+            const size = (bytes) => {
+                if (bytes >= 1073741824)
+                    return (bytes / 1073741824).toFixed(2) + " ГБ";
+                if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " МБ";
+                if (bytes >= 1024) return Math.round(bytes / 1024) + " КБ";
+                return bytes + " Б";
+            };
+
+            const normalizeName = (s) =>
+                s.toLowerCase().trim().split(/\s+/).filter(Boolean).join("-");
+
+            let editing = null;
+            let mcVersions = [];
+
+            function message(box, kind, text) {
+                box.className = kind ? "msg show " + kind : "msg";
+                box.innerHTML = text || "";
+            }
+
+            let toastTimer;
+            function toast(kind, text, keep) {
+                clearTimeout(toastTimer);
+                message($("toast"), kind, text);
+                if (!keep)
+                    toastTimer = setTimeout(
+                        () => message($("toast"), null),
+                        6000,
+                    );
+            }
+
+            async function api(path, options) {
+                const r = await fetch(path, options);
+                if (!r.ok) throw new Error((await r.text()).trim() || r.status);
+                return r.status === 204 ? null : r.json();
+            }
+
+            // ─── список сборок ───
+
+            function row(m) {
+                const links = m.latest_version
+                    ? "<a href='/modpacks/" +
+                      encodeURIComponent(m.name) +
+                      "/pack'>.pasyotpack</a> &nbsp; <a href='/modpacks/" +
+                      encodeURIComponent(m.name) +
+                      "/archive'>.zip</a> &nbsp; <a href='/modpacks/" +
+                      encodeURIComponent(m.name) +
+                      "/manifest'>манифест</a> &nbsp; "
+                    : "";
+                return (
+                    "<tr><td class='name'>" +
+                    escape(m.name) +
+                    "</td><td>" +
+                    escape(m.loader || "—") +
+                    "</td><td>" +
+                    escape(m.minecraft || "—") +
+                    "</td><td>" +
+                    (m.latest_version ? "v" + m.latest_version : "нет версий") +
+                    "</td><td class='actions'>" +
+                    links +
+                    "<button class='ghost' data-edit='" +
+                    escape(m.name) +
+                    "'>Изменить</button></td></tr>"
+                );
+            }
+
+            async function loadList() {
+                try {
+                    const list = await api("/modpacks");
+                    if (!list.length) {
+                        $("list").innerHTML =
+                            "<div class='empty'>Пока ни одной сборки. Нажмите «Создать сборку».</div>";
+                        return;
+                    }
+                    $("list").innerHTML =
+                        "<table><thead><tr><th>Название</th><th>Модлоадер</th><th>Minecraft</th><th>Версия</th><th></th></tr></thead><tbody>" +
+                        list.map(row).join("") +
+                        "</tbody></table>";
+                    $("list")
+                        .querySelectorAll("[data-edit]")
+                        .forEach(
+                            (b) => (b.onclick = () => openEditor(b.dataset.edit)),
+                        );
+                } catch (e) {
+                    $("list").innerHTML =
+                        "<div class='empty'>Не удалось загрузить список: " +
+                        escape(e.message) +
+                        "</div>";
+                }
+            }
+
+            // ─── версии Minecraft ───
+
+            async function loadVersions() {
+                try {
+                    const d = await api("/minecraft/versions");
+                    mcVersions = d.versions;
+                } catch {
+                    mcVersions = [];
+                }
+                fillVersions("");
+            }
+
+            function resetVersion(selected) {
+                $("custom").value = "";
+                $("custom").required = false;
+                $("customwrap").hidden = true;
+                fillVersions(selected || "");
+            }
+
+            function fillVersions(selected) {
+                const list = mcVersions.slice();
+                if (selected && !list.includes(selected)) list.unshift(selected);
+                $("minecraft").innerHTML =
+                    "<option value='' disabled" +
+                    (selected ? "" : " selected") +
+                    ">выберите</option>" +
+                    list
+                        .map(
+                            (v) =>
+                                "<option value='" +
+                                escape(v) +
+                                "'" +
+                                (v === selected ? " selected" : "") +
+                                ">" +
+                                escape(v) +
+                                "</option>",
+                        )
+                        .join("") +
+                    "<option value='__other'>другая версия…</option>";
+
+                $("mchint").textContent = mcVersions.length
+                    ? ""
+                    : "Список версий не загрузился — впишите версию вручную.";
+                if (!list.length) {
+                    $("minecraft").value = "__other";
+                    $("customwrap").hidden = false;
+                    $("custom").required = true;
+                }
+            }
+
+            $("minecraft").onchange = () => {
+                const other = $("minecraft").value === "__other";
+                $("customwrap").hidden = !other;
+                $("custom").required = other;
+                if (other) $("custom").focus();
+            };
+
+            function chosenVersion() {
+                return $("minecraft").value === "__other"
+                    ? $("custom").value.trim()
+                    : $("minecraft").value;
+            }
+
+            // ─── окно ───
+
+            function openCreate() {
+                editing = null;
+                $("dialogtitle").textContent = "Новая сборка";
+                $("name").value = "";
+                $("name").disabled = false;
+                $("namehint").textContent = "";
+                $("loader").value = "";
+                resetVersion();
+                $("file").value = "";
+                $("filehint").textContent = " (можно загрузить позже)";
+                $("versionswrap").hidden = true;
+                $("delete").hidden = true;
+                $("save").textContent = "Создать";
+                message($("dialogmsg"), null);
+                $("progress").hidden = true;
+                $("editor").showModal();
+            }
+
+            async function openEditor(name) {
+                try {
+                    editing = await api("/modpacks/" + encodeURIComponent(name));
+                } catch (e) {
+                    toast("err", "Не удалось открыть сборку: " + e.message, true);
+                    return;
+                }
+                const current = editing.versions[0];
+                $("dialogtitle").innerHTML =
+                    "Сборка <span>" + escape(editing.name) + "</span>";
+                $("name").value = editing.name;
+                $("name").disabled = true;
+                $("namehint").textContent =
+                    "Название менять нельзя: оно в выданных .pasyotpack и в адресах.";
+                $("loader").value = editing.loader || "";
+                resetVersion(editing.minecraft || "");
+                $("file").value = "";
+                $("filehint").textContent = current
+                    ? " — заменит текущие файлы, прежние удалятся"
+                    : " — первая версия сборки";
+                $("versions").innerHTML = current
+                    ? "<div><b>Текущая версия v" +
+                      current.version +
+                      "</b> — " +
+                      current.file_count +
+                      " файлов, " +
+                      size(current.total_bytes) +
+                      ", от " +
+                      new Date(current.created_at).toLocaleDateString() +
+                      "</div><div><a href='/modpacks/" +
+                      encodeURIComponent(editing.name) +
+                      "/pack'>.pasyotpack</a> &nbsp; <a href='/modpacks/" +
+                      encodeURIComponent(editing.name) +
+                      "/archive'>скачать файлы .zip</a></div>"
+                    : "<div>Файлов пока нет — загрузите первый архив.</div>";
+                $("versionswrap").hidden = false;
+                $("delete").hidden = false;
+                $("save").textContent = "Сохранить";
+                message($("dialogmsg"), null);
+                $("progress").hidden = true;
+                $("editor").showModal();
+            }
+
+            $("new").onclick = openCreate;
+            $("cancel").onclick = () => $("editor").close();
+
+            $("name").oninput = (e) => {
+                const normalized = normalizeName(e.target.value);
+                $("namehint").innerHTML =
+                    normalized && normalized !== e.target.value
+                        ? "Сохранится как <b>" + escape(normalized) + "</b>"
+                        : "";
+            };
+
+            $("delete").onclick = async () => {
+                if (
+                    !confirm(
+                        "Удалить сборку " +
+                            editing.name +
+                            " со всеми версиями? Выданные .pasyotpack перестанут работать.",
                     )
-                    .join("");
+                )
+                    return;
+                try {
+                    await api("/modpacks/" + encodeURIComponent(editing.name), {
+                        method: "DELETE",
+                    });
+                    $("editor").close();
+                    toast("ok", "Сборка " + editing.name + " удалена");
+                    loadList();
+                } catch (e) {
+                    message($("dialogmsg"), "err", "Не удалось удалить: " + escape(e.message));
+                }
+            };
+
+            function uploadVersion(name, file) {
+                return new Promise((resolve, reject) => {
+                    const form = new FormData();
+                    form.append("file", file);
+                    const xhr = new XMLHttpRequest();
+                    xhr.open(
+                        "POST",
+                        "/modpacks/" + encodeURIComponent(name) + "/versions",
+                    );
+                    $("progress").hidden = false;
+                    $("progress").value = 0;
+
+                    xhr.upload.onprogress = (ev) => {
+                        if (!ev.lengthComputable) return;
+                        const percent = Math.round((ev.loaded / ev.total) * 100);
+                        $("progress").value = percent;
+                        message(
+                            $("dialogmsg"),
+                            "info",
+                            percent < 100
+                                ? "Отправлено " +
+                                      percent +
+                                      "% (" +
+                                      size(ev.loaded) +
+                                      " из " +
+                                      size(ev.total) +
+                                      ")"
+                                : "Архив отправлен, сервер распаковывает и считает хэши…",
+                        );
+                    };
+                    xhr.onload = () =>
+                        xhr.status === 201
+                            ? resolve(JSON.parse(xhr.responseText))
+                            : reject(
+                                  new Error(
+                                      String(
+                                          xhr.responseText || xhr.status,
+                                      ).trim(),
+                                  ),
+                              );
+                    xhr.onerror = () =>
+                        reject(new Error("связь с сервером оборвалась"));
+                    xhr.send(form);
+                });
+            }
+
+            $("form").onsubmit = async (e) => {
+                e.preventDefault();
+                const minecraft = chosenVersion();
+                const file = $("file").files[0];
+                $("save").disabled = true;
+                $("delete").disabled = true;
+
+                try {
+                    let name;
+                    if (editing) {
+                        $("save").textContent = "Сохраняем…";
+                        const m = await api(
+                            "/modpacks/" + encodeURIComponent(editing.name),
+                            {
+                                method: "PATCH",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({
+                                    loader: $("loader").value,
+                                    minecraft: minecraft,
+                                }),
+                            },
+                        );
+                        name = m.name;
+                    } else {
+                        $("save").textContent = "Создаём…";
+                        const m = await api("/modpacks", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                name: $("name").value,
+                                loader: $("loader").value,
+                                minecraft: minecraft,
+                            }),
+                        });
+                        name = m.name;
+                    }
+
+                    if (!file) {
+                        $("editor").close();
+                        toast(
+                            "ok",
+                            editing
+                                ? "Настройки сборки " + name + " сохранены"
+                                : "Сборка " +
+                                      name +
+                                      " создана — откройте её, чтобы загрузить файлы",
+                        );
+                        loadList();
+                        return;
+                    }
+
+                    $("save").textContent = "Загружаем…";
+                    const d = await uploadVersion(name, file);
+                    $("editor").close();
+                    toast(
+                        "ok",
+                        "Версия " +
+                            d.version.version +
+                            " сборки " +
+                            name +
+                            " готова: " +
+                            d.version.file_count +
+                            " файлов, " +
+                            size(d.version.total_bytes) +
+                            ". <a href='" +
+                            escape(d.pack_url) +
+                            "'>Скачать .pasyotpack</a>",
+                        true,
+                    );
+                    loadList();
+                } catch (err) {
+                    message(
+                        $("dialogmsg"),
+                        "err",
+                        (String(err.message).includes("identical")
+                            ? "Файлы не изменились: "
+                            : "Ошибка: ") + escape(err.message),
+                    );
+                } finally {
+                    $("progress").hidden = true;
+                    $("save").disabled = false;
+                    $("delete").disabled = false;
+                    $("save").textContent = editing ? "Сохранить" : "Создать";
+                }
+            };
+
+            // ─── вход ───
+
+            function deny(kind, html) {
+                $("denied").hidden = false;
+                message($("denied"), kind, html);
             }
 
             async function start() {
-                const me = await fetch("/auth/me");
-                if (!me.ok || !(await me.json()).is_admin) {
-                    $("denied").hidden = false;
+                let me;
+                try {
+                    me = await fetch("/auth/me");
+                } catch {
+                    deny("err", "Сервер недоступен — проверьте, что бэкенд запущен.");
                     return;
                 }
-                $("page").hidden = false;
-                packs();
+                if (me.status === 401) {
+                    deny(
+                        "info",
+                        "Вы не вошли. <a href='/auth/vedrow/start?next=/admin.html'>Войти через Vedrow</a>",
+                    );
+                    return;
+                }
+                if (!me.ok) {
+                    deny("err", "Не удалось проверить вход: " + me.status);
+                    return;
+                }
+                const user = await me.json();
+                if (!user.is_admin) {
+                    deny(
+                        "err",
+                        "Аккаунт <b>" +
+                            escape(user.username) +
+                            "</b> не в списке администраторов. Добавьте его в ADMINS в .env на сервере и войдите заново — права выдаются при входе. <a href='/'>На главную</a>",
+                    );
+                    return;
+                }
+                $("new").hidden = false;
+                loadVersions();
+                loadList();
             }
-
-            $("create").onsubmit = async (e) => {
-                e.preventDefault();
-                const form = new FormData(e.target);
-                const r = await fetch("/modpacks", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        name: form.get("name"),
-                        loader: form.get("loader"),
-                    }),
-                });
-                if (!r.ok) {
-                    $("result").innerHTML =
-                        '<p class="error">' + (await r.text()) + "</p>";
-                    return;
-                }
-                e.target.reset();
-                $("result").innerHTML =
-                    "<p>Модпак создан: " + (await r.json()).slug + "</p>";
-                packs();
-            };
-
-            $("upload").onsubmit = async (e) => {
-                e.preventDefault();
-                const form = new FormData(e.target);
-                const slug = form.get("slug");
-                form.delete("slug");
-                $("result").innerHTML = '<p class="meta">Загружаем…</p>';
-                const r = await fetch("/modpacks/" + slug + "/versions", {
-                    method: "POST",
-                    body: form,
-                });
-                if (!r.ok) {
-                    $("result").innerHTML =
-                        '<p class="error">' + (await r.text()) + "</p>";
-                    return;
-                }
-                const d = await r.json();
-                $("result").innerHTML =
-                    "<p>Версия " +
-                    d.version.version +
-                    ": " +
-                    d.version.file_count +
-                    " файлов, " +
-                    (d.version.total_bytes / 1048576).toFixed(1) +
-                    " МБ</p>" +
-                    '<p><a href="' +
-                    d.pack_url +
-                    '">Скачать файл для лаунчера</a></p>' +
-                    "<pre>" +
-                    JSON.stringify(d.pack, null, 2) +
-                    "</pre>";
-                e.target.reset();
-                packs();
-            };
 
             start();
         </script>

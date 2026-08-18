@@ -1,18 +1,18 @@
 package handler
 
 import (
+	"archive/zip"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"pasyot-launcher/internal/domain"
 	"pasyot-launcher/internal/pack"
-	"pasyot-launcher/internal/slug"
 	"pasyot-launcher/internal/store"
 
 	"github.com/go-chi/chi/v5"
@@ -30,12 +30,12 @@ func (h *Handler) ListModpacks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetModpack(w http.ResponseWriter, r *http.Request) {
-	m, err := h.Store.Modpack(r.Context(), chi.URLParam(r, "slug"))
+	m, err := h.Store.Modpack(r.Context(), chi.URLParam(r, "name"))
 	if err != nil {
 		h.storeError(w, err)
 		return
 	}
-	versions, err := h.Store.Versions(r.Context(), m.Slug)
+	versions, err := h.Store.Versions(r.Context(), m.Name)
 	if err != nil {
 		internalError(w, err)
 		return
@@ -49,17 +49,17 @@ func (h *Handler) GetModpack(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateModpack(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name        string `json:"name"`
-		Slug        string `json:"slug"`
 		Description string `json:"description"`
 		Loader      string `json:"loader"`
+		Minecraft   string `json:"minecraft"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		badRequest(w, "bad json")
 		return
 	}
-	body.Name = strings.TrimSpace(body.Name)
-	if body.Name == "" || len([]rune(body.Name)) > 64 {
-		badRequest(w, "name: 1-64 characters")
+	name := domain.NormalizeName(body.Name)
+	if !domain.ValidName(name) {
+		badRequest(w, "name: latin letters, digits, hyphen and underscore, 1-64 characters")
 		return
 	}
 	loader := strings.ToLower(strings.TrimSpace(body.Loader))
@@ -67,24 +67,20 @@ func (h *Handler) CreateModpack(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "loader: one of "+strings.Join(domain.Loaders, ", "))
 		return
 	}
-	s := body.Slug
-	if s == "" {
-		s = slug.Make(body.Name)
-	}
-	if !slug.Valid(s) {
-		badRequest(w, "slug: only a-z, 0-9, hyphen and underscore; set it explicitly")
+	minecraft := strings.TrimSpace(body.Minecraft)
+	if !domain.ValidMinecraft(minecraft) {
+		badRequest(w, "minecraft: version like 1.20.1, up to 16 characters")
 		return
 	}
-
-	if _, err := h.Store.Modpack(r.Context(), s); err == nil {
-		http.Error(w, "modpack with this slug already exists", http.StatusConflict)
+	if _, err := h.Store.Modpack(r.Context(), name); err == nil {
+		http.Error(w, "modpack with this name already exists", http.StatusConflict)
 		return
 	} else if !errors.Is(err, store.ErrNotFound) {
 		internalError(w, err)
 		return
 	}
 
-	m, err := h.Store.CreateModpack(r.Context(), s, body.Name, strings.TrimSpace(body.Description), loader)
+	m, err := h.Store.CreateModpack(r.Context(), name, strings.TrimSpace(body.Description), loader, minecraft)
 	if err != nil {
 		internalError(w, err)
 		return
@@ -92,17 +88,65 @@ func (h *Handler) CreateModpack(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, m)
 }
 
-func (h *Handler) DeleteModpack(w http.ResponseWriter, r *http.Request) {
-	if err := h.Store.DeleteModpack(r.Context(), chi.URLParam(r, "slug")); err != nil {
+func (h *Handler) UpdateModpack(w http.ResponseWriter, r *http.Request) {
+	m, err := h.Store.Modpack(r.Context(), chi.URLParam(r, "name"))
+	if err != nil {
 		h.storeError(w, err)
 		return
 	}
+	var body struct {
+		Description *string `json:"description"`
+		Loader      *string `json:"loader"`
+		Minecraft   *string `json:"minecraft"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		badRequest(w, "bad json")
+		return
+	}
+
+	description, loader, minecraft := m.Description, m.Loader, m.Minecraft
+	if body.Description != nil {
+		description = strings.TrimSpace(*body.Description)
+	}
+	if body.Loader != nil {
+		loader = strings.ToLower(strings.TrimSpace(*body.Loader))
+		if !domain.ValidLoader(loader) {
+			badRequest(w, "loader: one of "+strings.Join(domain.Loaders, ", "))
+			return
+		}
+	}
+	if body.Minecraft != nil {
+		minecraft = strings.TrimSpace(*body.Minecraft)
+		if !domain.ValidMinecraft(minecraft) {
+			badRequest(w, "minecraft: version like 1.20.1, up to 16 characters")
+			return
+		}
+	}
+
+	if err := h.Store.UpdateModpack(r.Context(), m.Name, description, loader, minecraft); err != nil {
+		h.storeError(w, err)
+		return
+	}
+	updated, err := h.Store.Modpack(r.Context(), m.Name)
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteModpack(w http.ResponseWriter, r *http.Request) {
+	orphans, err := h.Store.DeleteModpack(r.Context(), chi.URLParam(r, "name"))
+	if err != nil {
+		h.storeError(w, err)
+		return
+	}
+	h.removeBlobs(orphans)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) UploadVersion(w http.ResponseWriter, r *http.Request) {
-	packSlug := chi.URLParam(r, "slug")
-	m, err := h.Store.Modpack(r.Context(), packSlug)
+	m, err := h.Store.Modpack(r.Context(), chi.URLParam(r, "name"))
 	if err != nil {
 		h.storeError(w, err)
 		return
@@ -127,7 +171,7 @@ func (h *Handler) UploadVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fingerprint := pack.Fingerprint(files)
-	prev, prevNumber, err := h.Store.LatestFingerprint(r.Context(), m.Slug)
+	prev, prevNumber, err := h.Store.LatestFingerprint(r.Context(), m.Name)
 	if err != nil {
 		internalError(w, err)
 		return
@@ -139,12 +183,13 @@ func (h *Handler) UploadVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := userFrom(r)
-	version, err := h.Store.CreateVersion(r.Context(), m.Slug, files,
+	version, orphans, err := h.Store.ReplaceVersion(r.Context(), m.Name, files,
 		strings.TrimSpace(up.Fields["notes"]), user.Username, fingerprint)
 	if err != nil {
 		internalError(w, err)
 		return
 	}
+	h.removeBlobs(orphans)
 
 	m.LatestVersion = version.Version
 	base := h.baseURL(r)
@@ -152,8 +197,8 @@ func (h *Handler) UploadVersion(w http.ResponseWriter, r *http.Request) {
 		"modpack":      m,
 		"version":      version,
 		"groups":       pack.Groups(files),
-		"manifest_url": manifestURL(base, m.Slug, version.Version),
-		"pack_url":     fmt.Sprintf("%s/modpacks/%s/versions/%d/pack", base, m.Slug, version.Version),
+		"manifest_url": manifestURL(base, m.Name),
+		"pack_url":     fmt.Sprintf("%s/modpacks/%s/pack", base, m.Name),
 		"pack":         packDescriptor(base, m, version.Version),
 	})
 }
@@ -170,9 +215,9 @@ func (h *Handler) Manifest(w http.ResponseWriter, r *http.Request) {
 	}
 	manifest := domain.Manifest{
 		Format:     manifestFormat,
-		Modpack:    m.Slug,
 		Name:       m.Name,
 		Loader:     m.Loader,
+		Minecraft:  m.Minecraft,
 		Version:    version.Version,
 		Notes:      version.Notes,
 		Groups:     pack.Groups(files),
@@ -181,11 +226,7 @@ func (h *Handler) Manifest(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:  version.CreatedAt,
 		Files:      files,
 	}
-	if chi.URLParam(r, "version") != "" {
-		w.Header().Set("Cache-Control", "public, max-age=86400")
-	} else {
-		w.Header().Set("Cache-Control", "no-store")
-	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, manifest)
 }
 
@@ -195,28 +236,67 @@ func (h *Handler) PackFile(w http.ResponseWriter, r *http.Request) {
 		h.storeError(w, err)
 		return
 	}
-	filename := fmt.Sprintf("%s-v%d.pasyotpack", m.Slug, version.Version)
+	filename := fmt.Sprintf("%s-v%d.pasyotpack", m.Name, version.Version)
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	writeJSON(w, http.StatusOK, packDescriptor(h.baseURL(r), m, version.Version))
 }
 
-func (h *Handler) loadVersion(r *http.Request) (*domain.Modpack, *domain.Version, []domain.File, error) {
-	m, err := h.Store.Modpack(r.Context(), chi.URLParam(r, "slug"))
+func (h *Handler) VersionArchive(w http.ResponseWriter, r *http.Request) {
+	m, version, files, err := h.loadVersion(r)
 	if err != nil {
-		return nil, nil, nil, err
+		h.storeError(w, err)
+		return
 	}
-	number := 0
-	if raw := chi.URLParam(r, "version"); raw != "" {
-		number, err = strconv.Atoi(raw)
-		if err != nil || number <= 0 {
-			return nil, nil, nil, store.ErrNotFound
+
+	filename := fmt.Sprintf("%s-v%d.zip", m.Name, version.Version)
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.Header().Set("Cache-Control", "no-store")
+
+	zw := zip.NewWriter(w)
+	for _, f := range files {
+		src, _, err := h.Blobs.Open(f.SHA256)
+		if err != nil {
+			log.Printf("[ERROR] archive %s: %s: %v", filename, f.Path, err)
+			return
+		}
+		dst, err := zw.CreateHeader(&zip.FileHeader{
+			Name:     f.Path,
+			Method:   compressionFor(f.Path),
+			Modified: version.CreatedAt,
+		})
+		if err == nil {
+			_, err = io.Copy(dst, src)
+		}
+		src.Close()
+		if err != nil {
+			log.Printf("[ERROR] archive %s: %s: %v", filename, f.Path, err)
+			return
 		}
 	}
-	version, err := h.Store.Version(r.Context(), m.Slug, number)
+	if err := zw.Close(); err != nil {
+		log.Printf("[ERROR] archive %s: %v", filename, err)
+	}
+}
+
+func compressionFor(path string) uint16 {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".jar", ".zip", ".png", ".ogg", ".jpg", ".jpeg", ".gz", ".webp":
+		return zip.Store
+	}
+	return zip.Deflate
+}
+
+func (h *Handler) loadVersion(r *http.Request) (*domain.Modpack, *domain.Version, []domain.File, error) {
+	m, err := h.Store.Modpack(r.Context(), chi.URLParam(r, "name"))
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	files, err := h.Store.VersionFiles(r.Context(), m.Slug, version.Version)
+	version, err := h.Store.Version(r.Context(), m.Name, 0)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	files, err := h.Store.VersionFiles(r.Context(), m.Name, version.Version)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -288,18 +368,18 @@ func (h *Handler) receiveFile(r *http.Request) (u upload, err error) {
 
 func packDescriptor(base string, m *domain.Modpack, version int) domain.Pack {
 	return domain.Pack{
-		Format:      manifestFormat,
-		Server:      base,
-		Modpack:     m.Slug,
-		Name:        m.Name,
-		Loader:      m.Loader,
-		Version:     version,
-		ManifestURL: manifestURL(base, m.Slug, version),
+		Format:    manifestFormat,
+		Server:    base,
+		Name:      m.Name,
+		Loader:    m.Loader,
+		Minecraft: m.Minecraft,
+		Version:   version,
+		Manifest:  manifestURL(base, m.Name),
 	}
 }
 
-func manifestURL(base, slug string, version int) string {
-	return fmt.Sprintf("%s/modpacks/%s/versions/%d/manifest", base, slug, version)
+func manifestURL(base, name string) string {
+	return fmt.Sprintf("%s/modpacks/%s/manifest", base, name)
 }
 
 func splitList(raw string) []string {
@@ -314,6 +394,20 @@ func splitList(raw string) []string {
 		}
 	}
 	return out
+}
+
+func (h *Handler) removeBlobs(shas []string) {
+	freed := 0
+	for _, sha := range shas {
+		if err := h.Blobs.Remove(sha); err != nil {
+			log.Printf("[ERROR] removing object %s: %v", sha, err)
+			continue
+		}
+		freed++
+	}
+	if freed > 0 {
+		log.Printf("storage: removed %d unused objects", freed)
+	}
 }
 
 func (h *Handler) storeError(w http.ResponseWriter, err error) {

@@ -36,12 +36,38 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("schema: %w", err)
 	}
+	if err := dropUnusedColumns(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("schema: %w", err)
+	}
 	return &Store{db: db}, nil
+}
+
+func dropUnusedColumns(db *sql.DB) error {
+	columns := []struct{ table, column string }{
+		{"modpacks", "name"},
+	}
+	for _, c := range columns {
+		var exists int
+		err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&exists)
+		if err != nil {
+			return err
+		}
+		if exists == 0 {
+			continue
+		}
+		if _, err := db.Exec(`ALTER TABLE ` + c.table + ` DROP COLUMN ` + c.column); err != nil {
+			return fmt.Errorf("%s.%s: %w", c.table, c.column, err)
+		}
+		log.Printf("schema: dropped column %s.%s", c.table, c.column)
+	}
+	return nil
 }
 
 func addMissingColumns(db *sql.DB) error {
 	columns := []struct{ table, column, ddl string }{
 		{"modpacks", "loader", `ALTER TABLE modpacks ADD COLUMN loader TEXT NOT NULL DEFAULT ''`},
+		{"modpacks", "minecraft", `ALTER TABLE modpacks ADD COLUMN minecraft TEXT NOT NULL DEFAULT ''`},
 	}
 	for _, c := range columns {
 		var exists int
@@ -154,18 +180,20 @@ func (s *Store) TakeLoginState(ctx context.Context, state string) (verifier, nex
 	return verifier, next, nil
 }
 
-func (s *Store) CreateModpack(ctx context.Context, slug, name, description, loader string) (*domain.Modpack, error) {
+func (s *Store) CreateModpack(ctx context.Context, name, description, loader, minecraft string) (*domain.Modpack, error) {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO modpacks (slug, name, description, loader, created_at) VALUES (?, ?, ?, ?, ?)`,
-		slug, name, description, loader, time.Now().Unix())
+		INSERT INTO modpacks (slug, description, loader, minecraft, created_at) VALUES (?, ?, ?, ?, ?)`,
+		name, description, loader, minecraft, time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
-	return s.Modpack(ctx, slug)
+	return s.Modpack(ctx, name)
 }
 
-func (s *Store) DeleteModpack(ctx context.Context, slug string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM modpacks WHERE slug = ?`, slug)
+func (s *Store) UpdateModpack(ctx context.Context, name, description, loader, minecraft string) error {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE modpacks SET description = ?, loader = ?, minecraft = ? WHERE slug = ?`,
+		description, loader, minecraft, name)
 	if err != nil {
 		return err
 	}
@@ -175,8 +203,36 @@ func (s *Store) DeleteModpack(ctx context.Context, slug string) error {
 	return nil
 }
 
+func (s *Store) DeleteModpack(ctx context.Context, slug string) ([]string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	dropped, err := txStrings(ctx, tx, `SELECT DISTINCT sha256 FROM version_files WHERE modpack_slug = ?`, slug)
+	if err != nil {
+		return nil, err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM modpacks WHERE slug = ?`, slug)
+	if err != nil {
+		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, ErrNotFound
+	}
+	orphans, err := txOrphans(ctx, tx, dropped)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return orphans, nil
+}
+
 const modpackColumns = `
-	m.slug, m.name, m.description, m.loader, m.created_at,
+	m.slug AS name, m.description, m.loader, m.minecraft, m.created_at,
 	COALESCE((SELECT MAX(number) FROM versions v WHERE v.modpack_slug = m.slug), 0)`
 
 func (s *Store) Modpacks(ctx context.Context) ([]domain.Modpack, error) {
@@ -189,7 +245,7 @@ func (s *Store) Modpacks(ctx context.Context) ([]domain.Modpack, error) {
 	for rows.Next() {
 		var m domain.Modpack
 		var created int64
-		if err := rows.Scan(&m.Slug, &m.Name, &m.Description, &m.Loader, &created, &m.LatestVersion); err != nil {
+		if err := rows.Scan(&m.Name, &m.Description, &m.Loader, &m.Minecraft, &created, &m.LatestVersion); err != nil {
 			return nil, err
 		}
 		m.CreatedAt = time.Unix(created, 0).UTC()
@@ -202,7 +258,7 @@ func (s *Store) Modpack(ctx context.Context, slug string) (*domain.Modpack, erro
 	var m domain.Modpack
 	var created int64
 	err := s.db.QueryRowContext(ctx, `SELECT `+modpackColumns+` FROM modpacks m WHERE m.slug = ?`, slug).
-		Scan(&m.Slug, &m.Name, &m.Description, &m.Loader, &created, &m.LatestVersion)
+		Scan(&m.Name, &m.Description, &m.Loader, &m.Minecraft, &created, &m.LatestVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -213,17 +269,25 @@ func (s *Store) Modpack(ctx context.Context, slug string) (*domain.Modpack, erro
 	return &m, nil
 }
 
-func (s *Store) CreateVersion(ctx context.Context, slug string, files []domain.File, notes, createdBy, fingerprint string) (*domain.Version, error) {
+func (s *Store) ReplaceVersion(ctx context.Context, slug string, files []domain.File, notes, createdBy, fingerprint string) (*domain.Version, []string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer tx.Rollback()
 
 	var number int
 	if err := tx.QueryRowContext(ctx,
 		`SELECT COALESCE(MAX(number), 0) + 1 FROM versions WHERE modpack_slug = ?`, slug).Scan(&number); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	dropped, err := txStrings(ctx, tx, `SELECT DISTINCT sha256 FROM version_files WHERE modpack_slug = ?`, slug)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM versions WHERE modpack_slug = ?`, slug); err != nil {
+		return nil, nil, err
 	}
 
 	var total int64
@@ -235,28 +299,76 @@ func (s *Store) CreateVersion(ctx context.Context, slug string, files []domain.F
 		INSERT INTO versions (modpack_slug, number, notes, file_count, total_bytes, fingerprint, created_by, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		slug, number, notes, len(files), total, fingerprint, createdBy, now); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO version_files (modpack_slug, number, path, grp, size, sha256, optional)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer stmt.Close()
 	for _, f := range files {
 		if _, err := stmt.ExecContext(ctx, slug, number, f.Path, f.Group, f.Size, f.SHA256, boolInt(f.Optional)); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
+
+	orphans, err := txOrphans(ctx, tx, dropped)
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return &domain.Version{
 		Version: number, Notes: notes, FileCount: len(files), TotalBytes: total,
 		CreatedBy: createdBy, CreatedAt: time.Unix(now, 0).UTC(),
-	}, nil
+	}, orphans, nil
+}
+
+func txStrings(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func txOrphans(ctx context.Context, tx *sql.Tx, candidates []string) ([]string, error) {
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	referenced := map[string]bool{}
+	for _, query := range []string{
+		`SELECT DISTINCT sha256 FROM version_files`,
+		`SELECT DISTINCT sha256 FROM launcher_builds`,
+	} {
+		list, err := txStrings(ctx, tx, query)
+		if err != nil {
+			return nil, err
+		}
+		for _, sha := range list {
+			referenced[sha] = true
+		}
+	}
+	var orphans []string
+	for _, sha := range candidates {
+		if !referenced[sha] {
+			orphans = append(orphans, sha)
+		}
+	}
+	return orphans, nil
 }
 
 func (s *Store) Versions(ctx context.Context, slug string) ([]domain.Version, error) {

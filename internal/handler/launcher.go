@@ -169,3 +169,9 @@ func (h *Handler) UploadLauncher(w http.ResponseWriter, r *http.Request) {
 	build.URL = h.baseURL(r) + "/launcher/download"
 	writeJSON(w, http.StatusCreated, build)
 }
+
+func (h *Handler) MinecraftVersions(w http.ResponseWriter, r *http.Request) {
+	versions, source := h.Minecraft.Versions(r.Context())
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	writeJSON(w, http.StatusOK, map[string]any{"versions": versions, "source": source})
+}

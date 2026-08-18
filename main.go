@@ -16,6 +16,7 @@ import (
 
 	"pasyot-launcher/internal/blob"
 	"pasyot-launcher/internal/handler"
+	"pasyot-launcher/internal/minecraft"
 	"pasyot-launcher/internal/store"
 	"pasyot-launcher/internal/vedrow"
 
@@ -84,10 +85,14 @@ func main() {
 		}
 	}
 
+	mcVersions := minecraft.New()
+	go mcVersions.Warm()
+
 	h := &handler.Handler{
 		Store:           st,
 		Blobs:           blobs,
 		Vedrow:          vd,
+		Minecraft:       mcVersions,
 		Admins:          splitEnv("ADMINS"),
 		LauncherURL:     launcherURL,
 		LauncherFile:    launcherFile,

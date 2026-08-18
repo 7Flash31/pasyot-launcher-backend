@@ -5,35 +5,58 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Pasyot</title>
         <style>
+            :root {
+                --line: #e2e2e2;
+                --muted: #6b6b6b;
+                --accent: #1b1b1b;
+                --bad: #c0392b;
+                --ok: #1e7e45;
+            }
+            * {
+                box-sizing: border-box;
+            }
             body {
                 margin: 0;
                 font:
-                    16px/1.5 system-ui,
+                    16px/1.55 system-ui,
                     sans-serif;
+                color: #111;
                 display: flex;
                 min-height: 100vh;
             }
             aside {
-                width: 220px;
-                padding: 20px;
-                border-right: 1px solid #ddd;
+                width: 260px;
+                padding: 24px 20px;
+                border-right: 1px solid var(--line);
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+            .brand {
+                font-size: 20px;
+                font-weight: 700;
+                letter-spacing: 0.02em;
             }
             main {
                 flex: 1;
-                padding: 40px;
+                padding: 56px 40px;
+                max-width: 720px;
             }
             h1 {
-                margin: 0 0 24px;
+                margin: 0 0 8px;
+                font-size: 32px;
+            }
+            .lead {
+                margin: 0 0 32px;
+                color: var(--muted);
             }
             a.btn,
-            button {
+            button.btn {
                 display: block;
                 width: 100%;
-                box-sizing: border-box;
-                margin-bottom: 8px;
                 padding: 10px 14px;
-                border: 1px solid #888;
-                border-radius: 6px;
+                border: 1px solid #c9c9c9;
+                border-radius: 8px;
                 background: #fff;
                 font: inherit;
                 text-align: center;
@@ -41,91 +64,259 @@
                 color: inherit;
                 cursor: pointer;
             }
+            a.btn:hover,
+            button.btn:hover {
+                border-color: #999;
+                background: #fafafa;
+            }
             a.download {
                 display: inline-block;
-                padding: 14px 28px;
-                border-radius: 6px;
-                background: #222;
+                padding: 15px 30px;
+                border-radius: 10px;
+                background: var(--accent);
                 color: #fff;
                 text-decoration: none;
                 font-size: 18px;
+                font-weight: 600;
             }
-            p.meta {
-                color: #666;
+            a.download:hover {
+                background: #000;
+            }
+            a.download[aria-disabled="true"] {
+                background: #bdbdbd;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+            .meta {
+                margin-top: 12px;
+                color: var(--muted);
                 font-size: 14px;
             }
-            p.error {
-                color: #c00;
+            .meta code {
+                font-size: 13px;
+            }
+            .user {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-weight: 600;
+            }
+            .avatar {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                object-fit: cover;
+                background: #eee;
+            }
+            .role {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--ok);
+                border: 1px solid currentColor;
+                border-radius: 999px;
+                padding: 1px 8px;
+            }
+            .note {
+                font-size: 14px;
+                color: var(--muted);
+            }
+            .error {
+                font-size: 14px;
+                color: var(--bad);
+            }
+            .steps {
+                margin: 40px 0 0;
+                padding: 20px;
+                border: 1px solid var(--line);
+                border-radius: 10px;
+                font-size: 15px;
+            }
+            .steps h2 {
+                margin: 0 0 10px;
+                font-size: 15px;
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                color: var(--muted);
+            }
+            .steps ol {
+                margin: 0;
+                padding-left: 20px;
+            }
+            .steps li + li {
+                margin-top: 6px;
+            }
+            @media (max-width: 700px) {
+                body {
+                    flex-direction: column;
+                }
+                aside {
+                    width: auto;
+                    border-right: 0;
+                    border-bottom: 1px solid var(--line);
+                }
+                main {
+                    padding: 32px 20px;
+                }
             }
         </style>
     </head>
     <body>
         <aside>
-            <div id="auth"></div>
+            <div class="brand">Pasyot</div>
+            <div id="auth" class="note">Проверяем вход…</div>
         </aside>
 
         <main>
-            <h1>Пасёт</h1>
+            <h1>Лаунчер Pasyot</h1>
+            <p class="lead">
+                Один клик — и сборка сама скачается и обновится.
+            </p>
+
             <p>
-                <a class="download" href="/launcher/download"
+                <a class="download" id="download" href="/launcher/download"
                     >Скачать лаунчер</a
                 >
             </p>
-            <p class="meta" id="build"></p>
+            <p class="meta" id="build">Загружаем данные о сборке…</p>
+
+            <div class="steps">
+                <h2>Как начать играть</h2>
+                <ol>
+                    <li>Скачайте и запустите лаунчер.</li>
+                    <li>
+                        Получите у администратора файл сборки
+                        <code>.pasyotpack</code>.
+                    </li>
+                    <li>
+                        Откройте его в лаунчере — файлы скачаются сами, при
+                        обновлении сборки докачается только изменившееся.
+                    </li>
+                </ol>
+            </div>
         </main>
 
         <script>
-            const errors = {
+            const $ = (id) => document.getElementById(id);
+
+            const loginErrors = {
                 access_denied: "Вход отменён",
-                expired_state: "Ссылка входа устарела, попробуйте снова",
-                vedrow_unavailable: "Ведро недоступно",
-                invalid_response: "Некорректный ответ от Ведра",
+                expired_state: "Ссылка входа устарела, попробуйте ещё раз",
+                vedrow_unavailable: "Vedrow сейчас недоступен",
+                invalid_response: "Некорректный ответ от Vedrow",
             };
 
-            function describe(b) {
+            const escape = (s) =>
+                String(s).replace(
+                    /[&<>"']/g,
+                    (c) =>
+                        ({
+                            "&": "&amp;",
+                            "<": "&lt;",
+                            ">": "&gt;",
+                            '"': "&quot;",
+                            "'": "&#39;",
+                        })[c],
+                );
+
+            const size = (bytes) => {
+                if (bytes >= 1073741824)
+                    return (bytes / 1073741824).toFixed(2) + " ГБ";
+                if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " МБ";
+                if (bytes >= 1024) return Math.round(bytes / 1024) + " КБ";
+                return bytes + " Б";
+            };
+
+            function buildLine(b) {
                 const parts = [];
-                if (b.version) parts.push("Версия " + b.version);
-                if (b.size) parts.push((b.size / 1048576).toFixed(1) + " МБ");
-                return parts.join(", ");
+                if (b.version) parts.push("Версия " + escape(b.version));
+                if (b.size) parts.push(size(b.size));
+                if (b.sha256)
+                    parts.push(
+                        "sha256 <code>" +
+                            escape(b.sha256.slice(0, 12)) +
+                            "…</code>",
+                    );
+                return parts.join(" · ") || "Готово к скачиванию";
             }
 
-            async function load() {
+            async function loadBuild() {
+                try {
+                    const r = await fetch("/launcher/latest");
+                    if (r.status === 404) {
+                        $("build").textContent =
+                            "Сборка лаунчера ещё не загружена — зайдите позже.";
+                        $("download").setAttribute("aria-disabled", "true");
+                        return;
+                    }
+                    if (!r.ok) throw new Error(r.status);
+                    $("build").innerHTML = buildLine(await r.json());
+                } catch {
+                    $("build").innerHTML =
+                        '<span class="error">Не удалось получить данные о сборке. Обновите страницу.</span>';
+                }
+            }
+
+            function renderGuest() {
+                $("auth").innerHTML =
+                    '<a class="btn" href="/auth/vedrow/start?next=/">Войти через Vedrow</a>' +
+                    '<p class="note" style="margin:10px 0 0">Вход нужен только администраторам сборок.</p>';
+            }
+
+            function renderUser(user) {
+                $("auth").innerHTML =
+                    '<div class="user">' +
+                    (user.avatar_url
+                        ? '<img class="avatar" src="' +
+                          escape(user.avatar_url) +
+                          '" alt="" />'
+                        : "") +
+                    escape(user.username) +
+                    "</div>" +
+                    (user.is_admin
+                        ? '<div style="margin:6px 0 10px"><span class="role">администратор</span></div>' +
+                          '<a class="btn" href="/admin.html">Модпаки</a>'
+                        : '<p class="note" style="margin:6px 0 10px">Прав администратора нет.</p>') +
+                    '<button class="btn" id="logout">Выйти</button>';
+
+                if ($("logout")) {
+                    $("logout").onclick = async (e) => {
+                        e.target.disabled = true;
+                        e.target.textContent = "Выходим…";
+                        await fetch("/auth/logout", { method: "POST" });
+                        location.href = "/";
+                    };
+                }
+            }
+
+            async function loadAuth() {
                 const err = new URLSearchParams(location.search).get(
                     "login_error",
                 );
-                if (err) {
-                    document.getElementById("auth").innerHTML =
-                        '<p class="error">' + (errors[err] || err) + "</p>";
-                }
-
-                const build = await fetch("/launcher/latest");
-                document.getElementById("build").textContent = build.ok
-                    ? await build.json().then(describe)
-                    : "Сборка лаунчера ещё не загружена";
-
-                const me = await fetch("/auth/me");
-                const auth = document.getElementById("auth");
-                if (!me.ok) {
-                    auth.innerHTML +=
-                        '<a class="btn" href="/auth/vedrow/start?next=/">Вход через Ведро</a>';
+                try {
+                    const r = await fetch("/auth/me");
+                    if (r.ok) {
+                        renderUser(await r.json());
+                    } else {
+                        renderGuest();
+                    }
+                } catch {
+                    $("auth").innerHTML =
+                        '<span class="error">Сервер недоступен</span>';
                     return;
                 }
-                const user = await me.json();
-                auth.innerHTML +=
-                    "<p>" +
-                    user.username +
-                    "</p>" +
-                    (user.is_admin
-                        ? '<a class="btn" href="/admin.html">Сделать модпак</a>'
-                        : "") +
-                    '<button id="logout">Выйти</button>';
-                document.getElementById("logout").onclick = async () => {
-                    await fetch("/auth/logout", { method: "POST" });
-                    location.href = "/";
-                };
+                if (err) {
+                    $("auth").insertAdjacentHTML(
+                        "beforeend",
+                        '<p class="error" style="margin:10px 0 0">' +
+                            escape(loginErrors[err] || err) +
+                            "</p>",
+                    );
+                    history.replaceState(null, "", location.pathname);
+                }
             }
 
-            load();
+            loadBuild();
+            loadAuth();
         </script>
     </body>
 </html>

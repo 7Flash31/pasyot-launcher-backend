@@ -22,21 +22,39 @@ Update with `git pull && docker compose up -d --build`.
 
 ## Quick start on a workstation
 
-The start scripts create a local `.env` on first run (they never overwrite an
-existing one) and bring the server up:
-
 ```bash
-./start.sh              # macOS, Linux: build and run locally, needs Go
+./start.sh              # macOS, Linux: build and run locally
 ./start.sh --docker     # the same stack as on a server, needs docker
 ```
 
 ```bat
-start.bat               ::  Windows: build and run locally, needs Go, no docker
+start.bat               ::  Windows: build and run locally, no docker
 ```
 
-Only Go is required for the local path — the SQLite driver is pure Go, so there
-is no C toolchain to install. Vedrow login stays off (`503`) until `VEDROW_*` and
-`ADMINS` are filled in `.env`; everything else works meanwhile.
+**Nothing needs to be installed first.** If there is no Go, the script downloads
+the official toolchain into `.toolchain/go` next to the project, checks its
+sha256 against go.dev and builds with it — no PATH changes, no administrator
+rights, no system installer. Deleting `.toolchain/` undoes it. On Windows the
+download is done by `install-go.ps1`, which `start.bat` calls itself.
+
+**`.env` is created on the first run** (an existing one is never overwritten)
+with this machine's address on the local network, so other computers can install
+modpacks from it:
+
+```
+PUBLIC_BASE_URL=http://192.168.0.35:8081
+VEDROW_REDIRECT_URI=http://127.0.0.1:8081/auth/vedrow/callback
+```
+
+Two addresses, because Vedrow accepts a redirect URI only over https or on
+loopback — a LAN address it will refuse. So players use the LAN address and the
+admin logs in from the server machine at `http://127.0.0.1:8081`; register
+`http://127.0.0.1/auth/vedrow/callback` in Vedrow (the port is not compared for
+loopback). A LAN address also changes with DHCP — on a real server put a domain
+into `PUBLIC_BASE_URL` instead.
+
+Vedrow login stays off (`503`) until `VEDROW_*` and `ADMINS` are filled;
+everything else works meanwhile.
 
 By hand it is the same two steps:
 
@@ -82,14 +100,23 @@ certificate is issued, then turn the proxy back on (Full strict mode).
 ## The site
 
 Two static files in `web/`, served by the backend itself (`WEB_DIR`, `./web` by
-default):
+default). No build step, no dependencies — plain HTML with inline CSS and JS.
 
-- `index.html` — the launcher download button, Vedrow login on the left, and a
-  "make a modpack" link for an admin;
-- `admin.html` — create a modpack and upload an archive; the response contains a
-  link to the `.pasyotpack` file.
+- `index.html` — the launcher download button with version, size and hash;
+  Vedrow login in the sidebar; a short "how to start playing" block. Every state
+  is visible: checking login, guest, admin, server down, login error, no build
+  uploaded yet.
+- `admin.html` — a table of modpacks and one dialog for everything else.
+  "Создать сборку" asks for the name (with a live preview of the normalized
+  form), loader, Minecraft version from a dropdown and, optionally, the first
+  `.zip` right away. Clicking a modpack opens the same dialog in edit mode:
+  settings, the list of its versions with links to each `.pasyotpack` and to the
+  original files as a `.zip`, uploading a new version and deleting the pack.
+  Uploads show a real progress bar (XHR) that switches to "server is unpacking"
+  at 100%. Every action reports success or the backend's error text.
 
-The site's visible text is Russian on purpose: that is what players see.
+The site's visible text is Russian on purpose: that is what players see. Product
+names stay latin — Pasyot, Vedrow, Minecraft, NeoForge.
 
 One origin for the site and the API, which is why the session cookie just works
 and CORS is off by default. If the frontend ever moves to a separate domain, set
@@ -120,14 +147,20 @@ Everything else follows from that:
 - the launcher compares hashes and downloads only the files that differ;
 - `/objects/<sha>` is cacheable forever — that address never holds another file.
 
-A version is immutable. Every archive upload is a new version; old ones stay
-installable, so "roll back to the previous build" is just another number in a
-manifest. Uploading the same archive twice does **not** create a version (409).
+A modpack keeps exactly one state: whatever the admin uploaded last. A new
+archive replaces the previous one and its files leave the store immediately
+unless something else still references them, so a `.pasyotpack` handed out
+months ago installs today's build. The version number still increments — that is
+how the launcher notices an update. Uploading the same archive twice changes
+nothing (409).
+
+There is no rollback: upload a broken build and the previous one is gone. Grab
+the `.zip` of the current version first if you want a way back.
 
 The admin path end to end:
 
 ```
-Vedrow login -> POST /modpacks -> POST /modpacks/{slug}/versions (zip)
+Vedrow login -> POST /modpacks -> POST /modpacks/{name}/versions (zip)
    -> pack_url in the response -> download .pasyotpack -> hand it out
 ```
 
@@ -186,11 +219,11 @@ Short version of what lives where:
 |---|---|
 | `GET /launcher/latest`, `GET /launcher/download` | the download button on the main page |
 | `GET /auth/vedrow/start`, `/auth/me`, `POST /auth/logout` | Vedrow login |
-| `GET /modpacks`, `/modpacks/{slug}` | list and one modpack |
-| `GET /modpacks/{slug}/manifest` | what the launcher downloads: files, hashes, URLs |
-| `GET /modpacks/{slug}/pack` | `.pasyotpack` — the file a person carries to the launcher |
+| `GET /modpacks`, `/modpacks/{name}` | list and one modpack |
+| `GET /modpacks/{name}/manifest` | what the launcher downloads: files, hashes, URLs |
+| `GET /modpacks/{name}/pack` | `.pasyotpack` — the file a person carries to the launcher |
 | `GET /objects/{sha}` | the files themselves; cached forever, `Range` and `ETag` |
-| `POST /modpacks`, `POST /modpacks/{slug}/versions` · admin | create a modpack, upload a version |
+| `POST /modpacks`, `POST /modpacks/{name}/versions` · admin | create a modpack, upload a version |
 
 Errors are plain text via `http.Error`, the same as in Vedrow: they cannot be
 parsed as JSON.
@@ -199,13 +232,11 @@ parsed as JSON.
 
 Left for later on purpose:
 
-- **garbage collection** in the store: deleted modpacks and versions do not free
-  files. A "show orphans / purge" endpoint, like Vedrow has;
 - **login from the launcher itself**: login currently assumes a browser. A
   desktop client needs a loopback redirect (RFC 8252) — Vedrow supports it, the
   port is not compared for loopback addresses;
-- **editing a modpack** (rename, change description or mod loader) and deleting a
-  single version;
+- **renaming a modpack** (the name is in every issued `.pasyotpack`) and
+  deleting a single version;
 - **real migrations**: the schema is applied whole and idempotently from
   `internal/store/schema.sql`, and missing columns are added on startup by
   `addMissingColumns` in `internal/store`. That covers adding a column to an
@@ -217,7 +248,8 @@ Left for later on purpose:
 ## Layout
 
 ```
-start.sh / start.bat      quick local start; --docker runs the full stack
+start.sh / start.bat      quick local start: installs Go if missing, writes .env
+install-go.ps1            Windows half of that: official toolchain into .toolchain/
 API.md                    API reference + how to connect the launcher (Russian)
 Dockerfile                static binary + web/ on alpine, 40 MB
 docker-compose.yml        backend + Caddy; all state in ./data on the host
@@ -229,12 +261,13 @@ internal/store            SQLite: all database work, no SQL leaks into handlers
 internal/blob             content-addressed file store (sha256)
 internal/pack             zip -> file list + fingerprint of the set
 internal/vedrow           OIDC client: authorize -> token -> userinfo
-internal/slug             cyrillic modpack name -> latin slug
+internal/minecraft        version list from Mojang, cached for a day
 internal/handler          routes, middleware, handlers
 ```
 
-Tests cover the riskiest parts: archive parsing (`internal/pack`),
-transliteration and the open-redirect guard.
+Tests cover the riskiest parts: archive parsing (`internal/pack`), the name,
+loader and Minecraft version rules (`internal/domain`) and the open-redirect
+guard (`internal/handler`).
 
 ```bash
 go test ./...
